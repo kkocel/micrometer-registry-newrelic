@@ -4,99 +4,27 @@
 
 ❗Notice: This project has been archived _as is_ and is no longer actively maintained.
 
-### OpenTelemetry Micrometer Shim 
+### OTLP Micrometer registry
 
-To send Micrometer metrics to New Relic, bridge Micrometer to the [OpenTelemetry SDK](https://github.com/open-telemetry/opentelemetry-java) using the [micrometer shim](https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/micrometer/micrometer-1.5/library), and configure the OpenTelemetry SDK to export via OTLP (OpenTelemetry Protocol) to [New Relic's OTLP endpoint](https://docs.newrelic.com/docs/more-integrations/open-source-telemetry-integrations/opentelemetry/get-started/opentelemetry-set-up-your-app/).
+To send Micrometer metrics to New Relic, use OTLP registry and configure it as follows:
 
-See Overview of [OpenTelemetry data in the UI](https://docs.newrelic.com/docs/more-integrations/open-source-telemetry-integrations/opentelemetry/view-your-data/opentelemetry-view-your-data/) for details on how to make use of Micrometer data on the New Relic platform.
-
-The [OpenTelemetry Micrometer Shim example](https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/micrometer-shim) demonstrates how to configure Micrometer to bridge metrics to OpenTelemetry and send it to New Relic via [OTLP](https://developer.newrelic.com/opentelemetry-masterclass/fundamentals/otlp/). The [New Relic OpenTelemetry SDK Config](https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/sdk-nr-config) demonstrates how to configure the OpenTelemetry SDK to export to New Relic via OTLP. Bringing both examples together yields the following configuration:
-
-```java
-package io.opentelemetry.example.micrometer;
-
-import io.micrometer.core.aop.TimedAspect;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter;
-import io.opentelemetry.instrumentation.micrometer.v1_5.OpenTelemetryMeterRegistry;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.metrics.Aggregation;
-import io.opentelemetry.sdk.metrics.InstrumentType;
-import io.opentelemetry.sdk.metrics.SdkMeterProvider;
-import io.opentelemetry.sdk.metrics.export.AggregationTemporalitySelector;
-import io.opentelemetry.sdk.metrics.export.DefaultAggregationSelector;
-import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
-import io.opentelemetry.sdk.resources.Resource;
-import java.time.Duration;
-import java.util.Optional;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-
-@SpringBootApplication
-public class Application {
-
-  public static void main(String[] args) {
-    SpringApplication.run(Application.class, args);
-  }
-
-  // Enable @Timed annotation
-  @Bean
-  public TimedAspect timedAspect(MeterRegistry registry) {
-    return new TimedAspect(registry);
-  }
-
-  @Bean
-  public OpenTelemetry openTelemetry() {
-    return OpenTelemetrySdk.builder()
-        .setMeterProvider(
-            SdkMeterProvider.builder()
-                .setResource(
-                    Resource.getDefault().toBuilder()
-                        .put("service.name", "micrometer-shim")
-                        // Include instrumentation.provider=micrometer to enable micrometer metrics
-                        // experience in New Relic
-                        .put("instrumentation.provider", "micrometer")
-                        .build())
-                .registerMetricReader(
-                    PeriodicMetricReader.builder(
-                            OtlpGrpcMetricExporter.builder()
-                                .setEndpoint("https://otlp.nr-data.net:4317")
-                                .addHeader(
-                                    "api-key",
-                                    Optional.ofNullable(System.getenv("NEW_RELIC_LICENSE_KEY"))
-                                        .filter(str -> !str.isEmpty() && !str.isBlank())
-                                        .orElseThrow())
-                                // IMPORTANT: New Relic requires metrics to be delta temporality
-                                .setAggregationTemporalitySelector(
-                                    AggregationTemporalitySelector.deltaPreferred())
-                                // Use exponential histogram aggregation for histogram instruments
-                                // to
-                                // produce better data and compression
-                                .setDefaultAggregationSelector(
-                                    DefaultAggregationSelector.getDefault()
-                                        .with(
-                                            InstrumentType.HISTOGRAM,
-                                            Aggregation.base2ExponentialBucketHistogram()))
-                                .build())
-                        // Match default micrometer collection interval of 60 seconds
-                        .setInterval(Duration.ofSeconds(60))
-                        .build())
-                .build())
-        .build();
-  }
-
-  @Bean
-  public MeterRegistry meterRegistry(OpenTelemetry openTelemetry) {
-    return OpenTelemetryMeterRegistry.builder(openTelemetry).build();
-  }
-}
+```yaml
+management:
+  otlp:
+    metrics:
+      export:
+        url: https://otlp.nr-data.net:4318/v1/metrics
+        aggregationTemporality: "delta"
+        headers:
+          api-key : <insert your licence here>
+        resourceAttributes:
+          instrumentation.provider: micrometer
+          service.name: <insert your service name>
 ```
 
 ### New Relic Micrometer registry
 
-❗Notice: Everything below this point details the archived New Relic Micrometer registry and may not apply to the recommended OpenTelemetry Micrometer Shim detailed above.
+❗Notice: Everything below this point details the archived New Relic Micrometer registry and may not apply to the recommended OTLP Micrometer registry detailed above.
 
 A [Micrometer metrics](https://micrometer.io/) registry for sending dimensional metrics to New Relic using the [New Relic Java Telemetry SDK](https://github.com/newrelic/newrelic-telemetry-sdk-java).
 
